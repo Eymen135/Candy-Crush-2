@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Candy Crush Mini – Seviye Katlanan Hamle</title>
+<style>
+body { font-family: Arial; text-align:center; background:#f7e8ff; }
+#menu, #game { display:none; }
+#board { width:490px; height:490px; margin:auto; display:grid; grid-template-columns:repeat(7,70px); grid-template-rows:repeat(7,70px); gap:5px; border:5px solid #333; padding:5px; background:#ddd; }
+.block { width:70px; height:70px; background:#fff; border-radius:10px; display:flex; align-items:center; justify-content:center; overflow:hidden; position:relative; }
+.tile { width:60px; height:60px; border-radius:10px; cursor:pointer; background-size:cover; position:absolute; top:0; left:5px; transition: top 0.3s; }
+button { margin:5px; padding:10px; font-size:16px; }
+</style>
+</head>
+<body>
+
+<h1>Candy Crush Mini – Seviye Katlanan Hamle</h1>
+
+<div id="menu">
+    <h2>Ana Menü</h2>
+    <div id="levels"></div>
+</div>
+
+<div id="game">
+    <h2 id="levelTitle"></h2>
+    <p>Puan: <span id="score">0</span> | Hamle: <span id="moves">0</span> | Geçmek için: <span id="target">100</span></p>
+    <div id="board"></div>
+    <button onclick="backToMenu()">Ana Menü</button>
+</div>
+
+<script>
+const width=7;
+const height=7;
+const candyImages=["resim1.png","resim2.png","resim3.png"];
+const explosionImage="patlama_efekti.png";
+
+let tiles=[],selected=null,score=0,moves=15,currentLevel=1,maxMoves=15,targetScore=100;
+let completedLevels=[];
+
+const menu=document.getElementById("menu");
+const game=document.getElementById("game");
+const board=document.getElementById("board");
+const scoreDisplay=document.getElementById("score");
+const movesDisplay=document.getElementById("moves");
+const levelTitle=document.getElementById("levelTitle");
+const targetDisplay=document.getElementById("target");
+const levelsDiv=document.getElementById("levels");
+
+// --- Menü ---
+function showMenu(){
+    game.style.display="none";
+    menu.style.display="block";
+    levelsDiv.innerHTML="";
+    for(let i=1;i<=10;i++){
+        let btn=document.createElement("button");
+        btn.innerText="Seviye "+i;
+        if(i===1 || completedLevels.includes(i-1)) btn.onclick=()=>startLevel(i);
+        else btn.disabled=true;
+        levelsDiv.appendChild(btn);
+    }
+}
+
+// --- Başlat ---
+function startLevel(level){
+    currentLevel = level;
+    menu.style.display="none";
+    game.style.display="block";
+    levelTitle.innerText = "Seviye " + level;
+
+    // Hamle sayısı 2 katlanarak artıyor
+    maxMoves = 15 * Math.pow(2, level-1);
+    moves = maxMoves;
+
+    score = 0;
+    targetScore = 100 * level;
+    scoreDisplay.innerText = score;
+    movesDisplay.innerText = moves;
+    targetDisplay.innerText = targetScore;
+    createBoard();
+}
+
+// --- Ana Menü ---
+function backToMenu(){ showMenu(); }
+
+// --- Board ---
+function createBoard(){
+    board.innerHTML="";
+    tiles=[];
+    for(let i=0;i<width*height;i++){
+        let block=document.createElement("div");
+        block.classList.add("block");
+        block.dataset.index=i;
+
+        let tile=document.createElement("div");
+        tile.classList.add("tile");
+        tile.dataset.index=i;
+
+        let candy;
+        do{
+            candy=candyImages[Math.floor(Math.random()*candyImages.length)];
+        } while(
+            (i%width>=2 && tiles[i-1].style.backgroundImage===`url(${candy})` && tiles[i-2].style.backgroundImage===`url(${candy})`) ||
+            (i>=2*width && tiles[i-width].style.backgroundImage===`url(${candy})` && tiles[i-2*width].style.backgroundImage===`url(${candy})`)
+        );
+        tile.style.backgroundImage=`url(${candy})`;
+        tile.style.top="-70px";
+
+        tile.addEventListener("click",selectTile);
+        block.appendChild(tile);
+        board.appendChild(block);
+        tiles.push(tile);
+
+        setTimeout(()=>{ tile.style.top="0px"; }, i*50);
+    }
+}
+
+// --- Seçim ---
+function selectTile(){
+    if(!selected){ 
+        selected=this; selected.style.transform="scale(1.2)"; 
+    } else {
+        if(isAdjacent(selected,this)){
+            swapTiles(selected,this);
+            selected.style.transform="scale(1)";
+            selected=null;
+            moves--; movesDisplay.innerText=moves;
+            if(moves<=0) setTimeout(levelOver,500);
+        } else {
+            selected.style.transform="scale(1)";
+            selected=this;
+            selected.style.transform="scale(1.2)";
+        }
+    }
+}
+
+function isAdjacent(t1,t2){
+    let i1=parseInt(t1.dataset.index);
+    let i2=parseInt(t2.dataset.index);
+    return (i1===i2-1 && i1%width!==width-1) || (i1===i2+1 && i1%width!==0) || i1===i2-width || i1===i2+width;
+}
+
+// --- Takas ---
+function swapTiles(t1,t2){
+    let c1=t1.style.backgroundImage;
+    let c2=t2.style.backgroundImage;
+    t1.style.backgroundImage=c2;
+    t2.style.backgroundImage=c1;
+
+    let affected = [parseInt(t1.dataset.index), parseInt(t2.dataset.index)];
+    setTimeout(()=>checkMatches(affected),150);
+}
+
+// --- Eşleşme Kontrol ---
+function checkMatches(changedTiles){
+    let normalMatches = [];
+    let superCandy=false;
+
+    changedTiles.forEach(idx=>{
+        let h=checkHorizontal(idx);
+        let v=checkVertical(idx);
+
+        if(h.length===3 && !arrayIncluded(normalMatches,h)) normalMatches.push(h);
+        if(v.length===3 && !arrayIncluded(normalMatches,v)) normalMatches.push(v);
+
+        if(tiles[idx].style.backgroundImage.includes("resim2.png") && (h.length===3 || v.length===3)){
+            superCandy=true;
+        }
+    });
+
+    // Normal 3’lülere puan ve animasyon
+    normalMatches.forEach(match=>{
+        animateExplode(match);
+        score +=10;
+    });
+    scoreDisplay.innerText=score;
+
+    // Süper şeker patlaması (puansız)
+    if(superCandy){
+        let allIndices = tiles.map((_,i)=>i);
+        animateExplode(allIndices);
+    }
+}
+
+// --- Animasyon ---
+function animateExplode(ids){
+    ids.forEach((id,i)=>{
+        setTimeout(()=>{
+            tiles[id].style.backgroundImage=`url(${explosionImage})`;
+            setTimeout(()=>{
+                tiles[id].style.backgroundImage=`url(${getRandomCandy(id)})`;
+            },200);
+        }, i*50);
+    });
+}
+
+// --- Yardımcı Fonksiyon ---
+function arrayIncluded(arr, subarr){
+    return arr.some(a=>a.join()==subarr.join());
+}
+
+// --- Random Şeker ---
+function getRandomCandy(idx){
+    let candy;
+    do{
+        candy=candyImages[Math.floor(Math.random()*candyImages.length)];
+    } while(
+        (idx%width>=2 && tiles[idx-1].style.backgroundImage===`url(${candy})` && tiles[idx-2].style.backgroundImage===`url(${candy})`) ||
+        (idx>=2*width && tiles[idx-width].style.backgroundImage===`url(${candy})` && tiles[idx-2*width].style.backgroundImage===`url(${candy})`)
+    );
+    return candy;
+}
+
+// --- 3'lü Kontrol ---
+function checkHorizontal(index){
+    let col=index%width;
+    if(col>width-3) return [];
+    let color=tiles[index].style.backgroundImage;
+    if(color===tiles[index+1].style.backgroundImage && color===tiles[index+2].style.backgroundImage){
+        return [index,index+1,index+2];
+    }
+    return [];
+}
+
+function checkVertical(index){
+    let row=Math.floor(index/width);
+    if(row>height-3) return [];
+    let color=tiles[index].style.backgroundImage;
+    if(color===tiles[index+width].style.backgroundImage && color===tiles[index+2*width].style.backgroundImage){
+        return [index,index+width,index+2*width];
+    }
+    return [];
+}
+
+// --- Seviye Sonu ---
+function levelOver(){
+    if(score>=targetScore){
+        alert("Tebrikler! Seviye geçti. Puan: "+score);
+        if(!completedLevels.includes(currentLevel)) completedLevels.push(currentLevel);
+    } else {
+        alert("Seviye bitti! Puan: "+score);
+    }
+    showMenu();
+}
+
+// --- Başlangıç ---
+showMenu();
+</script>
+
+</body>
+</html>
